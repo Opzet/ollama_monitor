@@ -83,6 +83,13 @@ class OllamaMetricsDB:
         )
         ''')
         
+        # Create indexes for faster queries
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_request_logs_timestamp ON request_logs (timestamp)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_request_logs_client_ip ON request_logs (client_ip)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_request_logs_model_name ON request_logs (model_name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_system_metrics_timestamp ON system_metrics (timestamp)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_models_timestamp ON models (timestamp)')
+
         conn.commit()
         conn.close()
     
@@ -90,9 +97,9 @@ class OllamaMetricsDB:
         """Save system metrics"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
-        
+
         ollama_process = metrics.get('ollama_process', {})
-        
+
         cursor.execute('''
         INSERT INTO system_metrics (
             timestamp, server_status, cpu_percent, memory_percent, 
@@ -109,9 +116,9 @@ class OllamaMetricsDB:
             metrics['system']['network_bytes_recv'],
             ollama_process.get('cpu_percent', 0),
             ollama_process.get('memory_percent', 0),
-            ollama_process.get('connections', 0)
+            ollama_process.get('connections', 0)  # Ensure connections are saved
         ))
-        
+
         conn.commit()
         conn.close()
     
@@ -330,12 +337,21 @@ class OllamaMonitor:
         """Get resource usage of the Ollama process"""
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
             if 'ollama' in proc.info['name'].lower():
-                return {
-                    "pid": proc.info['pid'],
-                    "cpu_percent": proc.info['cpu_percent'],
-                    "memory_percent": proc.info['memory_percent'],
-                    "connections": len(proc.connections())
-                }
+                try:
+                    return {
+                        "pid": proc.info['pid'],
+                        "cpu_percent": proc.info['cpu_percent'],
+                        "memory_percent": proc.info['memory_percent'],
+                        "connections": len(proc.net_connections(kind='inet'))  # Use 'inet' for network connections
+                    }
+                except psutil.AccessDenied:
+                    logger.warning(f"Access denied when retrieving connections for process {proc.info['pid']}")
+                    return {
+                        "pid": proc.info['pid'],
+                        "cpu_percent": proc.info['cpu_percent'],
+                        "memory_percent": proc.info['memory_percent'],
+                        "connections": -1  # Default to 0 if access is denied
+                    }
         return None
     
     def test_model_generation(self, model_name=None):
@@ -364,8 +380,8 @@ class OllamaMonitor:
                     "timestamp": datetime.now().isoformat(),
                     "client_ip": "127.0.0.1",  # Internal test
                     "model_name": model_name,
-                    "input_tokens": result.get('prompt_eval_count', 0),
-                    "output_tokens": result.get('eval_count', 0),
+                    "input_tokens": result.get('prompt_eval_count', 0),  # Ensure input tokens are extracted
+                    "output_tokens": result.get('eval_count', 0),  # Ensure output tokens are extracted
                     "response_time": response_time,
                     "status_code": response.status_code,
                     "endpoint": "/api/generate"
@@ -402,7 +418,7 @@ class OllamaMonitor:
                 self.db.save_system_metrics(metrics)
                 
                 # If the server is online, get and save the model list
-                if server_status:
+                if (server_status):
                     models = self.get_models()
                     if models:
                         self.db.save_models(timestamp, models)
@@ -848,8 +864,8 @@ function fetchRequestStats() {
         .then(data => {
             document.getElementById('totalRequests').innerText = data.total_requests;
             document.getElementById('avgResponseTime').innerText = data.avg_response_time.toFixed(2) + 's';
-            document.getElementById('totalInputTokens').innerText = data.total_input_tokens.toLocaleString();
-            document.getElementById('totalOutputTokens').innerText = data.total_output_tokens.toLocaleString();
+            document.getElementById('totalInputTokens').innerText = data.total_input_tokens.toLocaleString();  // Update input tokens
+            document.getElementById('totalOutputTokens').innerText = data.total_output_tokens.toLocaleString();  // Update output tokens
         })
         .catch(error => console.error('Failed to fetch request statistics:', error));
 }
@@ -1014,7 +1030,7 @@ function updateSystemStats(data) {
         document.getElementById('cpuUsage').innerText = latest.cpu_percent.toFixed(1) + '%';
         document.getElementById('memoryUsage').innerText = latest.memory_percent.toFixed(1) + '%';
         document.getElementById('diskUsage').innerText = latest.disk_percent.toFixed(1) + '%';
-        document.getElementById('ollamaConnections').innerText = latest.ollama_connections;
+        document.getElementById('ollamaConnections').innerText = latest.ollama_connections;  // Update Ollama connections
     }
 }
 ''')
@@ -1036,14 +1052,14 @@ def get_index_template():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ollama Monitoring System</title>
+    <title>LLM AI Monitoring System</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <header>
         <div class="container">
-            <h1>Ollama Monitoring System</h1>
+            <h1>LLM AI Monitoring System</h1>
         </div>
     </header>
     
@@ -1071,7 +1087,7 @@ def get_index_template():
             </div>
             <div class="stat-card">
                 <div class="stat-title">Disk Usage</div>
-                <div id="diskUsage" class="stat-value">0%</div>
+                <div id="diskUsage" class="stat-value">0%</</div>
             </div>
             <div class="stat-card">
                 <div class="stat-title">Ollama Connections</div>
@@ -1226,8 +1242,11 @@ def api_system_metrics():
 def api_request_logs():
     db = OllamaMetricsDB()
     hours = request.args.get('hours', 24, type=int)
+    limit = request.args.get('limit', 100, type=int)  # Add limit for pagination
+    offset = request.args.get('offset', 0, type=int)  # Add offset for pagination
     logs = db.get_recent_requests(hours)
-    return jsonify(logs)
+    paginated_logs = logs[offset:offset + limit]  # Apply pagination
+    return jsonify(paginated_logs)
 
 @app.route('/api/stats/models')
 def api_model_stats():
@@ -1241,7 +1260,8 @@ def api_model_stats():
             "request_count": row[1],
             "total_input_tokens": row[2] or 0,
             "total_output_tokens": row[3] or 0,
-            "avg_response_time": row[4] or 0
+            "avg_response_time": row[4] or 0,
+            "last_request": row[5]  # Assuming the query includes the last request timestamp
         })
     return jsonify(result)
 
@@ -1254,7 +1274,8 @@ def api_ip_stats():
     for row in stats:
         result.append({
             "client_ip": row[0],
-            "request_count": row[1]
+            "request_count": row[1],
+            "last_request": row[2]  # Assuming the query includes the last request timestamp
         })
     return jsonify(result)
 
@@ -1263,20 +1284,28 @@ def api_request_stats():
     db = OllamaMetricsDB()
     hours = request.args.get('hours', 24, type=int)
     logs = db.get_recent_requests(hours)
-    
+
     total_requests = len(logs)
     total_input_tokens = sum(log['input_tokens'] for log in logs)
     total_output_tokens = sum(log['output_tokens'] for log in logs)
-    
+
     # Calculate average response time
     response_times = [log['response_time'] for log in logs if log['response_time'] is not None]
     avg_response_time = sum(response_times) / len(response_times) if response_times else 0
-    
+
+    # Find the most active endpoint
+    endpoint_counts = {}
+    for log in logs:
+        endpoint = log['endpoint']
+        endpoint_counts[endpoint] = endpoint_counts.get(endpoint, 0) + 1
+    most_active_endpoint = max(endpoint_counts, key=endpoint_counts.get, default=None)
+
     return jsonify({
         "total_requests": total_requests,
         "total_input_tokens": total_input_tokens,
         "total_output_tokens": total_output_tokens,
-        "avg_response_time": avg_response_time
+        "avg_response_time": avg_response_time,
+        "most_active_endpoint": most_active_endpoint
     })
 
 # Ollama API proxy
@@ -1285,58 +1314,31 @@ def proxy_ollama(path):
     db = OllamaMetricsDB()
     start_time = time.time()
     client_ip = request.remote_addr
-    
+
     url = f"{OLLAMA_HOST}/{path}"
     headers = {key: value for (key, value) in request.headers if key != 'Host'}
-    
+
     try:
         if request.method == 'GET':
-            resp = requests.get(url, headers=headers, params=request.args)
+            resp = requests.get(url, headers=headers, params=request.args, timeout=10)
         elif request.method == 'POST':
             json_data = request.get_json(silent=True)
-            if json_data:
-                # For API requests, log input and output tokens
-                if path == 'api/generate' or path == 'api/chat':
-                    model_name = json_data.get('model', '')
-                    stream = json_data.get('stream', False)
-                    
-                    resp = requests.post(url, headers=headers, json=json_data)
-                    response_time = time.time() - start_time
-                    
-                    # Extract token information
-                    if resp.status_code == 200 and not stream:
-                        result = resp.json()
-                        input_tokens = result.get('prompt_eval_count', 0)
-                        output_tokens = result.get('eval_count', 0)
-                        
-                        # Save request log
-                        log_data = {
-                            "timestamp": datetime.now().isoformat(),
-                            "client_ip": client_ip,
-                            "model_name": model_name,
-                            "input_tokens": input_tokens,
-                            "output_tokens": output_tokens,
-                            "response_time": response_time,
-                            "status_code": resp.status_code,
-                            "endpoint": f"/{path}"
-                        }
-                        db.save_request_log(log_data)
-                else:
-                    resp = requests.post(url, headers=headers, json=json_data)
-            else:
-                resp = requests.post(url, headers=headers, data=request.get_data())
+            resp = requests.post(url, headers=headers, json=json_data, timeout=10)
         elif request.method == 'PUT':
-            resp = requests.put(url, headers=headers, data=request.get_data())
+            resp = requests.put(url, headers=headers, data=request.get_data(), timeout=10)
         elif request.method == 'DELETE':
-            resp = requests.delete(url, headers=headers)
+            resp = requests.delete(url, headers=headers, timeout=10)
         else:
             return jsonify({"error": "Method not allowed"}), 405
-        
+
         response_headers = [(name, value) for (name, value) in resp.raw.headers.items()]
         return resp.content, resp.status_code, response_headers
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         logger.error(f"Proxy request exception: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Upstream API request failed", "details": str(e)}), 502
+    except Exception as e:
+        logger.error(f"Unexpected proxy error: {str(e)}")
+        return jsonify({"error": "Unexpected error occurred", "details": str(e)}), 500
 
 def run_monitor():
     """Run monitoring thread"""
@@ -1347,6 +1349,24 @@ def run_monitor():
 def run_web_server(monitor):
     """Run web server"""
     app.config['MONITOR'] = monitor
+
+    # Get the local machine's hostname and IP address
+    hostname = socket.gethostname()
+    local_ip = socket.gethostbyname(hostname)
+
+    # Log and print startup information
+    startup_message = f"""
+    ============================================
+    LLM AI Monitoring System is starting...
+    Hostname: {hostname}
+    Local IP: {local_ip}
+    Web Server: http://{WEB_HOST}:{WEB_PORT}
+    ============================================
+    """
+    logger.info(startup_message.strip())
+    print(startup_message.strip())
+
+    # Start the web server
     logger.info(f"Web server is starting at http://{WEB_HOST}:{WEB_PORT}")
     serve(app, host=WEB_HOST, port=WEB_PORT, threads=10)
 
