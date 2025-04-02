@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from waitress import serve
 from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_socketio import SocketIO
 
 # Configure logging
 logging.basicConfig(
@@ -417,14 +418,8 @@ class OllamaMonitor:
                 # Save system metrics
                 self.db.save_system_metrics(metrics)
                 
-                # If the server is online, get and save the model list
-                if (server_status):
-                    models = self.get_models()
-                    if models:
-                        self.db.save_models(timestamp, models)
-                        
-                        # Test the default model's generation capability
-                        self.test_model_generation()
+                # Emit real-time metrics
+                socketio.emit('update_metrics', metrics)
                 
                 # Wait for the next interval
                 time.sleep(self.interval)
@@ -439,6 +434,18 @@ class OllamaMonitor:
 # Create Flask application
 app = Flask(__name__, static_folder='static')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# Initialize SocketIO
+socketio = SocketIO(app)
+
+# Emit system metrics in real-time
+def emit_system_metrics():
+    db = OllamaMetricsDB()
+    while True:
+        metrics = db.get_recent_system_metrics(hours=1)  # Get the last hour of data
+        if metrics:
+            socketio.emit('update_metrics', metrics[-1])  # Send the latest data point
+        socketio.sleep(1)  # Emit updates every second
 
 # Ensure static folder exists
 if not os.path.exists('static'):
@@ -1033,6 +1040,14 @@ function updateSystemStats(data) {
         document.getElementById('ollamaConnections').innerText = latest.ollama_connections;  // Update Ollama connections
     }
 }
+
+const socket = io();
+
+// Listen for real-time updates
+socket.on('update_metrics', function(data) {
+    updateSystemStats([data]); // Update the stats with the latest data
+    updateSystemCharts([data]); // Update the charts with the latest data
+});
 ''')
 # Template rendering
 @app.route('/')
@@ -1399,24 +1414,39 @@ WantedBy=multi-user.target
     print("sudo systemctl enable ollama-monitor")
     print("sudo systemctl start ollama-monitor")
 
+from threading import Thread
+
+def start_realtime_updates():
+    thread = Thread(target=emit_system_metrics)
+    thread.daemon = True
+    thread.start()
+
 if __name__ == "__main__":
-    # Ensure necessary directories exist
-    if not os.path.exists('templates'):
-        os.makedirs('templates')
-    if not os.path.exists('static'):
-        os.makedirs('static')
-    
-    # Generate system service file
-    # if '--install' in sys.argv:
-    #     write_systemd_service()
-    #     sys.exit(0)
-    
     # Start monitoring
     monitor = run_monitor()
-    
+
+    # Start real-time updates
+    start_realtime_updates()
+
+    # Get the local machine's hostname and IP address
+    hostname = socket.gethostname()
+    local_ip = socket.gethostbyname(hostname)
+
+    # Log and print startup information
+    startup_message = f"""
+    ============================================
+    LLM AI Monitoring System is starting...
+    Hostname: {hostname}
+    Local IP: {local_ip}
+    Web Server: http://{WEB_HOST}:{WEB_PORT}
+    ============================================
+    """
+    logger.info(startup_message.strip())
+    print(startup_message.strip())
+
     try:
-        # Start web server
-        run_web_server(monitor)
+        # Start web server with SocketIO
+        socketio.run(app, host=WEB_HOST, port=WEB_PORT)
     except KeyboardInterrupt:
         logger.info("Interrupt signal received, shutting down...")
         monitor.stop()
