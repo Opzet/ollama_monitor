@@ -12,7 +12,7 @@ from flask import Flask, request, jsonify, render_template, send_from_directory
 from waitress import serve
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-# 配置日志
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -20,25 +20,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger('ollama_monitor')
 
-# 配置参数
+# Configuration parameters
 OLLAMA_HOST = "http://localhost:11434"
-MONITOR_INTERVAL = 60  # 监控间隔(秒)
+MONITOR_INTERVAL = 60  # Monitoring interval (seconds)
 WEB_HOST = "0.0.0.0"
 WEB_PORT = 8080
 DB_FILE = "ollama_metrics.db"
 
 class OllamaMetricsDB:
     def __init__(self, db_file=DB_FILE):
-        """初始化数据库连接"""
+        """Initialize database connection"""
         self.db_file = db_file
         self._create_tables()
     
     def _create_tables(self):
-        """创建必要的数据表"""
+        """Create necessary tables"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
-        # 系统指标表
+        # System metrics table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS system_metrics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +55,7 @@ class OllamaMetricsDB:
         )
         ''')
         
-        # 请求日志表
+        # Request logs table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS request_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +70,7 @@ class OllamaMetricsDB:
         )
         ''')
         
-        # 模型表
+        # Models table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS models (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,7 +87,7 @@ class OllamaMetricsDB:
         conn.close()
     
     def save_system_metrics(self, metrics):
-        """保存系统指标"""
+        """Save system metrics"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
@@ -116,7 +116,7 @@ class OllamaMetricsDB:
         conn.close()
     
     def save_models(self, timestamp, models):
-        """保存模型信息"""
+        """Save model information"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
@@ -140,7 +140,7 @@ class OllamaMetricsDB:
         conn.close()
     
     def save_request_log(self, log_data):
-        """保存请求日志"""
+        """Save request logs"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
@@ -164,7 +164,7 @@ class OllamaMetricsDB:
         conn.close()
     
     def get_recent_system_metrics(self, hours=24):
-        """获取最近的系统指标"""
+        """Get recent system metrics"""
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -182,7 +182,7 @@ class OllamaMetricsDB:
         return result
     
     def get_recent_requests(self, hours=24):
-        """获取最近的请求日志"""
+        """Get recent request logs"""
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -200,7 +200,7 @@ class OllamaMetricsDB:
         return result
     
     def get_client_ip_stats(self, hours=24):
-        """获取客户端IP统计"""
+        """Get client IP statistics"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
@@ -217,7 +217,7 @@ class OllamaMetricsDB:
         return result
     
     def get_model_usage_stats(self, hours=24):
-        """获取模型使用统计"""
+        """Get model usage statistics"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
@@ -238,7 +238,7 @@ class OllamaMetricsDB:
         return result
     
     def get_latest_models(self):
-        """获取最新的模型列表"""
+        """Get the latest model list"""
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -257,11 +257,11 @@ class OllamaMetricsDB:
 class OllamaMonitor:
     def __init__(self, host=OLLAMA_HOST, interval=MONITOR_INTERVAL):
         """
-        初始化Ollama监控器
+        Initialize Ollama monitor
         
-        参数:
-            host: Ollama服务的URL
-            interval: 检查间隔(秒)
+        Parameters:
+            host: URL of the Ollama service
+            interval: Check interval (seconds)
         """
         self.host = host
         self.interval = interval
@@ -271,55 +271,55 @@ class OllamaMonitor:
         self.default_model = None
     
     def get_models(self):
-        """获取所有可用的模型"""
+        """Get all available models"""
         try:
             response = requests.get(f"{self.api_endpoint}/tags")
             if response.status_code == 200:
                 models = response.json().get('models', [])
-                # 更新默认模型
+                # Update default model
                 if models and not self.default_model:
                     self.default_model = models[0].get('name')
                 return models
             else:
-                logger.error(f"获取模型列表失败: {response.status_code}")
+                logger.error(f"Failed to get model list: {response.status_code}")
                 return []
         except Exception as e:
-            logger.error(f"获取模型列表异常: {str(e)}")
+            logger.error(f"Exception while getting model list: {str(e)}")
             return []
     
     def get_model_details(self, model_name):
-        """获取模型详细信息"""
+        """Get model details"""
         try:
             data = {"model": model_name}
             response = requests.post(f"{self.api_endpoint}/show", json=data)
             if response.status_code == 200:
                 return response.json()
             else:
-                logger.error(f"获取模型详情失败: {response.status_code}")
+                logger.error(f"Failed to get model details: {response.status_code}")
                 return {}
         except Exception as e:
-            logger.error(f"获取模型详情异常: {str(e)}")
+            logger.error(f"Exception while getting model details: {str(e)}")
             return {}
     
     def get_server_status(self):
-        """检查服务器状态"""
+        """Check server status"""
         try:
-            # 使用/api/tags接口检查服务状态，更可靠
+            # Use /api/tags endpoint to check server status, more reliable
             response = requests.get(f"{self.api_endpoint}/tags")
             return response.status_code == 200
         except Exception as e:
-            logger.error(f"服务器状态检查异常: {str(e)}")
+            logger.error(f"Exception while checking server status: {str(e)}")
             return False
     
     def get_system_metrics(self):
-        """获取系统资源指标"""
+        """Get system resource metrics"""
         metrics = {
             "cpu_percent": psutil.cpu_percent(interval=1),
             "memory_percent": psutil.virtual_memory().percent,
             "disk_percent": psutil.disk_usage('/').percent,
         }
         
-        # 获取网络使用数据
+        # Get network usage data
         network = psutil.net_io_counters()
         metrics["network_bytes_sent"] = network.bytes_sent
         metrics["network_bytes_recv"] = network.bytes_recv
@@ -327,7 +327,7 @@ class OllamaMonitor:
         return metrics
     
     def get_ollama_process_info(self):
-        """获取Ollama进程的资源使用情况"""
+        """Get resource usage of the Ollama process"""
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
             if 'ollama' in proc.info['name'].lower():
                 return {
@@ -339,12 +339,12 @@ class OllamaMonitor:
         return None
     
     def test_model_generation(self, model_name=None):
-        """测试模型生成能力"""
+        """Test model generation capability"""
         if not model_name and self.default_model:
             model_name = self.default_model
         
         if not model_name:
-            logger.warning("没有可用的模型来测试生成能力")
+            logger.warning("No available model to test generation capability")
             return None
         
         try:
@@ -362,7 +362,7 @@ class OllamaMonitor:
                 result = response.json()
                 log_data = {
                     "timestamp": datetime.now().isoformat(),
-                    "client_ip": "127.0.0.1",  # 内部测试
+                    "client_ip": "127.0.0.1",  # Internal test
                     "model_name": model_name,
                     "input_tokens": result.get('prompt_eval_count', 0),
                     "output_tokens": result.get('eval_count', 0),
@@ -373,24 +373,24 @@ class OllamaMonitor:
                 self.db.save_request_log(log_data)
                 return response_time
             else:
-                logger.error(f"模型生成测试失败: {response.status_code}")
+                logger.error(f"Model generation test failed: {response.status_code}")
                 return None
         except Exception as e:
-            logger.error(f"模型生成测试异常: {str(e)}")
+            logger.error(f"Exception during model generation test: {str(e)}")
             return None
     
     def run(self):
-        """运行监控循环"""
-        logger.info("Ollama监控服务已启动")
+        """Run monitoring loop"""
+        logger.info("Ollama monitoring service started")
         
         while self.running:
             try:
                 timestamp = datetime.now().isoformat()
                 
-                # 检查服务器状态
+                # Check server status
                 server_status = self.get_server_status()
                 
-                # 收集系统指标
+                # Collect system metrics
                 metrics = {
                     "timestamp": timestamp,
                     "server_status": server_status,
@@ -398,38 +398,38 @@ class OllamaMonitor:
                     "ollama_process": self.get_ollama_process_info() or {},
                 }
                 
-                # 保存系统指标
+                # Save system metrics
                 self.db.save_system_metrics(metrics)
                 
-                # 如果服务器在线，获取并保存模型列表
+                # If the server is online, get and save the model list
                 if server_status:
                     models = self.get_models()
                     if models:
                         self.db.save_models(timestamp, models)
                         
-                        # 测试默认模型的生成能力
+                        # Test the default model's generation capability
                         self.test_model_generation()
                 
-                # 等待下一个间隔
+                # Wait for the next interval
                 time.sleep(self.interval)
             except Exception as e:
-                logger.error(f"监控循环异常: {str(e)}")
-                time.sleep(10)  # 发生错误时短暂暂停后重试
+                logger.error(f"Exception in monitoring loop: {str(e)}")
+                time.sleep(10)  # Short pause before retrying in case of error
     
     def stop(self):
-        """停止监控循环"""
+        """Stop monitoring loop"""
         self.running = False
 
-# 创建Flask应用
+# Create Flask application
 app = Flask(__name__, static_folder='static')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-# 确保静态文件夹存在
+# Ensure static folder exists
 if not os.path.exists('static'):
     os.makedirs('static')
 
-# 创建CSS和JS文件
-with open('static/style.css', 'w') as f:
+# Create CSS and JS files
+with open('static/style.css', 'w', encoding='utf-8') as f:
     f.write('''
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -586,38 +586,38 @@ tr:hover {
 
 with open('static/script.js', 'w') as f:
     f.write('''
-// 页面加载完成后运行
+// Run after the page loads
 document.addEventListener('DOMContentLoaded', function() {
-    // 初始化图表
+    // Initialize charts
     initCharts();
     
-    // 设置标签页切换
+    // Set up tab switching
     setupTabs();
     
-    // 设置自动刷新
-    setInterval(refreshData, 60000); // 每分钟刷新一次
+    // Set up auto-refresh
+    setInterval(refreshData, 60000); // Refresh every minute
     
-    // 初始加载数据
+    // Initial data load
     refreshData();
 });
 
-// 设置标签页切换
+// Set up tab switching
 function setupTabs() {
     const tabs = document.querySelectorAll('.tab');
     const tabContents = document.querySelectorAll('.tab-content > div');
     
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            // 移除所有active类
+            // Remove all active classes
             tabs.forEach(t => t.classList.remove('active'));
             tabContents.forEach(tc => tc.classList.remove('active'));
             
-            // 给当前标签和内容添加active类
+            // Add active class to the current tab and content
             tab.classList.add('active');
             const target = tab.getAttribute('data-target');
             document.getElementById(target).classList.add('active');
             
-            // 如果切换到图表标签页，重绘图表
+            // If switching to the charts tab, redraw charts
             if (target === 'charts') {
                 window.dispatchEvent(new Event('resize'));
             }
@@ -625,16 +625,16 @@ function setupTabs() {
     });
 }
 
-// 初始化所有图表
+// Initialize all charts
 function initCharts() {
-    // CPU使用率图表
+    // CPU usage chart
     const cpuCtx = document.getElementById('cpuChart').getContext('2d');
     window.cpuChart = new Chart(cpuCtx, {
         type: 'line',
         data: {
             labels: [],
             datasets: [{
-                label: '系统CPU使用率(%)',
+                label: 'System CPU Usage (%)',
                 data: [],
                 borderColor: '#3498db',
                 backgroundColor: 'rgba(52, 152, 219, 0.1)',
@@ -642,7 +642,7 @@ function initCharts() {
                 pointRadius: 0,
                 fill: true
             }, {
-                label: 'Ollama CPU使用率(%)',
+                label: 'Ollama CPU Usage (%)',
                 data: [],
                 borderColor: '#e74c3c',
                 backgroundColor: 'rgba(231, 76, 60, 0.1)',
@@ -677,14 +677,14 @@ function initCharts() {
         }
     });
     
-    // 内存使用率图表
+    // Memory usage chart
     const memoryCtx = document.getElementById('memoryChart').getContext('2d');
     window.memoryChart = new Chart(memoryCtx, {
         type: 'line',
         data: {
             labels: [],
             datasets: [{
-                label: '系统内存使用率(%)',
+                label: 'System Memory Usage (%)',
                 data: [],
                 borderColor: '#2ecc71',
                 backgroundColor: 'rgba(46, 204, 113, 0.1)',
@@ -692,7 +692,7 @@ function initCharts() {
                 pointRadius: 0,
                 fill: true
             }, {
-                label: 'Ollama内存使用率(%)',
+                label: 'Ollama Memory Usage (%)',
                 data: [],
                 borderColor: '#9b59b6',
                 backgroundColor: 'rgba(155, 89, 182, 0.1)',
@@ -727,14 +727,14 @@ function initCharts() {
         }
     });
     
-    // 网络流量图表
+    // Network traffic chart
     const networkCtx = document.getElementById('networkChart').getContext('2d');
     window.networkChart = new Chart(networkCtx, {
         type: 'line',
         data: {
             labels: [],
             datasets: [{
-                label: '发送流量(MB)',
+                label: 'Sent Traffic (MB)',
                 data: [],
                 borderColor: '#f39c12',
                 backgroundColor: 'rgba(243, 156, 18, 0.1)',
@@ -742,7 +742,7 @@ function initCharts() {
                 pointRadius: 0,
                 fill: true
             }, {
-                label: '接收流量(MB)',
+                label: 'Received Traffic (MB)',
                 data: [],
                 borderColor: '#16a085',
                 backgroundColor: 'rgba(22, 160, 133, 0.1)',
@@ -776,20 +776,20 @@ function initCharts() {
         }
     });
     
-    // Token使用图表
+    // Token usage chart
     const tokensCtx = document.getElementById('tokensChart').getContext('2d');
     window.tokensChart = new Chart(tokensCtx, {
         type: 'bar',
         data: {
             labels: [],
             datasets: [{
-                label: '输入Token',
+                label: 'Input Tokens',
                 data: [],
                 backgroundColor: 'rgba(52, 152, 219, 0.7)',
                 borderColor: 'rgba(52, 152, 219, 1)',
                 borderWidth: 1
             }, {
-                label: '输出Token',
+                label: 'Output Tokens',
                 data: [],
                 backgroundColor: 'rgba(46, 204, 113, 0.7)',
                 borderColor: 'rgba(46, 204, 113, 1)',
@@ -820,7 +820,7 @@ function initCharts() {
     });
 }
 
-// 刷新所有数据
+// Refresh all data
 function refreshData() {
     fetchSystemMetrics();
     fetchRequestStats();
@@ -830,7 +830,7 @@ function refreshData() {
     updateServerStatus();
 }
 
-// 获取系统指标数据
+// Fetch system metrics data
 function fetchSystemMetrics() {
     fetch('/api/metrics/system')
         .then(response => response.json())
@@ -838,10 +838,10 @@ function fetchSystemMetrics() {
             updateSystemCharts(data);
             updateSystemStats(data);
         })
-        .catch(error => console.error('获取系统指标失败:', error));
+        .catch(error => console.error('Failed to fetch system metrics:', error));
 }
 
-// 获取请求统计数据
+// Fetch request statistics data
 function fetchRequestStats() {
     fetch('/api/stats/requests')
         .then(response => response.json())
@@ -851,10 +851,10 @@ function fetchRequestStats() {
             document.getElementById('totalInputTokens').innerText = data.total_input_tokens.toLocaleString();
             document.getElementById('totalOutputTokens').innerText = data.total_output_tokens.toLocaleString();
         })
-        .catch(error => console.error('获取请求统计失败:', error));
+        .catch(error => console.error('Failed to fetch request statistics:', error));
 }
 
-// 获取模型统计数据
+// Fetch model statistics data
 function fetchModelStats() {
     fetch('/api/stats/models')
         .then(response => response.json())
@@ -862,13 +862,13 @@ function fetchModelStats() {
             const tableBody = document.getElementById('modelStatsBody');
             tableBody.innerHTML = '';
             
-            // 更新Token使用图表
+            // Update token usage chart
             const labels = [];
             const inputTokens = [];
             const outputTokens = [];
             
             data.forEach(model => {
-                // 添加表格行
+                // Add table row
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${model.model_name}</td>
@@ -879,22 +879,22 @@ function fetchModelStats() {
                 `;
                 tableBody.appendChild(row);
                 
-                // 更新图表数据
+                // Update chart data
                 labels.push(model.model_name);
                 inputTokens.push(model.total_input_tokens);
                 outputTokens.push(model.total_output_tokens);
             });
             
-            // 更新Token图表
+            // Update token chart
             window.tokensChart.data.labels = labels;
             window.tokensChart.data.datasets[0].data = inputTokens;
             window.tokensChart.data.datasets[1].data = outputTokens;
             window.tokensChart.update();
         })
-        .catch(error => console.error('获取模型统计失败:', error));
+        .catch(error => console.error('Failed to fetch model statistics:', error));
 }
 
-// 获取IP统计数据
+// Fetch IP statistics data
 function fetchIpStats() {
     fetch('/api/stats/ips')
         .then(response => response.json())
@@ -911,10 +911,10 @@ function fetchIpStats() {
                 tableBody.appendChild(row);
             });
         })
-        .catch(error => console.error('获取IP统计失败:', error));
+        .catch(error => console.error('Failed to fetch IP statistics:', error));
 }
 
-// 获取最近请求记录
+// Fetch recent request logs
 function fetchLatestRequests() {
     fetch('/api/logs/requests')
         .then(response => response.json())
@@ -937,77 +937,77 @@ function fetchLatestRequests() {
                 tableBody.appendChild(row);
             });
         })
-        .catch(error => console.error('获取请求日志失败:', error));
+        .catch(error => console.error('Failed to fetch request logs:', error));
 }
 
-// 更新服务器状态
+// Update server status
 function updateServerStatus() {
     fetch('/api/status')
         .then(response => response.json())
         .then(data => {
             const statusElement = document.getElementById('serverStatus');
             if (data.server_status) {
-                statusElement.innerHTML = '<span class="status-indicator status-up"></span>运行中';
+                statusElement.innerHTML = '<span class="status-indicator status-up"></span>Running';
                 statusElement.style.color = '#2ecc71';
             } else {
-                statusElement.innerHTML = '<span class="status-indicator status-down"></span>已停止';
+                statusElement.innerHTML = '<span class="status-indicator status-down"></span>Stopped';
                 statusElement.style.color = '#e74c3c';
             }
         })
         .catch(error => {
-            console.error('获取服务器状态失败:', error);
+            console.error('Failed to fetch server status:', error);
             const statusElement = document.getElementById('serverStatus');
-            statusElement.innerHTML = '<span class="status-indicator status-down"></span>连接失败';
+            statusElement.innerHTML = '<span class="status-indicator status-down"></span>Connection Failed';
             statusElement.style.color = '#e74c3c';
         });
 }
 
-// 更新系统图表
+// Update system charts
 function updateSystemCharts(data) {
-    // 仅保留最近24小时的数据点（假设每分钟1个数据点，最多1440个点）
+    // Keep only the most recent 24 hours of data points (assuming 1 data point per minute, max 1440 points)
     const maxDataPoints = 1440;
     
-    // 提取最近的数据点
+    // Extract recent data points
     const recentData = data.slice(-maxDataPoints);
     
-    // 格式化时间标签
+    // Format time labels
     const timeLabels = recentData.map(d => {
         const date = new Date(d.timestamp);
         return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     });
     
-    // 提取CPU数据
+    // Extract CPU data
     const cpuData = recentData.map(d => d.cpu_percent);
     const ollamaCpuData = recentData.map(d => d.ollama_cpu_percent);
     
-    // 提取内存数据
+    // Extract memory data
     const memoryData = recentData.map(d => d.memory_percent);
     const ollamaMemoryData = recentData.map(d => d.ollama_memory_percent);
     
-    // 提取网络数据并转换为MB
+    // Extract network data and convert to MB
     const networkSentData = recentData.map(d => d.network_bytes_sent / (1024 * 1024));
     const networkRecvData = recentData.map(d => d.network_bytes_recv / (1024 * 1024));
     
-    // 更新CPU图表
+    // Update CPU chart
     window.cpuChart.data.labels = timeLabels;
     window.cpuChart.data.datasets[0].data = cpuData;
     window.cpuChart.data.datasets[1].data = ollamaCpuData;
     window.cpuChart.update();
     
-    // 更新内存图表
+    // Update memory chart
     window.memoryChart.data.labels = timeLabels;
     window.memoryChart.data.datasets[0].data = memoryData;
     window.memoryChart.data.datasets[1].data = ollamaMemoryData;
     window.memoryChart.update();
     
-    // 更新网络图表
+    // Update network chart
     window.networkChart.data.labels = timeLabels;
     window.networkChart.data.datasets[0].data = networkSentData;
     window.networkChart.data.datasets[1].data = networkRecvData;
     window.networkChart.update();
 }
 
-// 更新系统统计信息
+// Update system statistics
 function updateSystemStats(data) {
     if (data.length > 0) {
         const latest = data[data.length - 1];
@@ -1018,8 +1018,7 @@ function updateSystemStats(data) {
     }
 }
 ''')
-
-# 模板渲染
+# Template rendering
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -1028,98 +1027,98 @@ def index():
 def send_static(path):
     return send_from_directory('static', path)
 
-# 创建模板文件
+# Create template file
 @app.route('/templates/index.html')
 def get_index_template():
     html = '''
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ollama监控系统</title>
+    <title>Ollama Monitoring System</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <header>
         <div class="container">
-            <h1>Ollama监控系统</h1>
+            <h1>Ollama Monitoring System</h1>
         </div>
     </header>
     
     <div class="container">
         <div class="dashboard">
             <div class="stat-card">
-                <div class="stat-title">服务器状态</div>
-                <div id="serverStatus" class="stat-value"><span class="status-indicator"></span>检查中...</div>
+                <div class="stat-title">Server Status</div>
+                <div id="serverStatus" class="stat-value"><span class="status-indicator"></span>Checking...</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">总请求数</div>
+                <div class="stat-title">Total Requests</div>
                 <div id="totalRequests" class="stat-value">0</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">平均响应时间</div>
+                <div class="stat-title">Average Response Time</div>
                 <div id="avgResponseTime" class="stat-value">0s</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">CPU使用率</div>
+                <div class="stat-title">CPU Usage</div>
                 <div id="cpuUsage" class="stat-value">0%</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">内存使用率</div>
+                <div class="stat-title">Memory Usage</div>
                 <div id="memoryUsage" class="stat-value">0%</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">磁盘使用率</div>
+                <div class="stat-title">Disk Usage</div>
                 <div id="diskUsage" class="stat-value">0%</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">Ollama连接数</div>
+                <div class="stat-title">Ollama Connections</div>
                 <div id="ollamaConnections" class="stat-value">0</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">总输入Token</div>
+                <div class="stat-title">Total Input Tokens</div>
                 <div id="totalInputTokens" class="stat-value">0</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">总输出Token</div>
+                <div class="stat-title">Total Output Tokens</div>
                 <div id="totalOutputTokens" class="stat-value">0</div>
             </div>
         </div>
         
         <div class="nav-tabs">
-            <div class="tab active" data-target="charts">图表监控</div>
-            <div class="tab" data-target="models">模型统计</div>
-            <div class="tab" data-target="clients">客户端统计</div>
-            <div class="tab" data-target="requests">请求日志</div>
+            <div class="tab active" data-target="charts">Chart Monitoring</div>
+            <div class="tab" data-target="models">Model Statistics</div>
+            <div class="tab" data-target="clients">Client Statistics</div>
+            <div class="tab" data-target="requests">Request Logs</div>
         </div>
         
         <div class="tab-content">
             <div id="charts" class="active">
                 <div class="card">
-                    <h2>CPU使用率</h2>
+                    <h2>CPU Usage</h2>
                     <div class="chart-container">
                         <canvas id="cpuChart"></canvas>
                     </div>
                 </div>
                 
                 <div class="card">
-                    <h2>内存使用率</h2>
+                    <h2>Memory Usage</h2>
                     <div class="chart-container">
                         <canvas id="memoryChart"></canvas>
                     </div>
                 </div>
                 
                 <div class="card">
-                    <h2>网络流量</h2>
+                    <h2>Network Traffic</h2>
                     <div class="chart-container">
                         <canvas id="networkChart"></canvas>
                     </div>
                 </div>
                 
                 <div class="card">
-                    <h2>Token使用情况</h2>
+                    <h2>Token Usage</h2>
                     <div class="chart-container">
                         <canvas id="tokensChart"></canvas>
                     </div>
@@ -1128,20 +1127,20 @@ def get_index_template():
             
             <div id="models">
                 <div class="card">
-                    <h2>模型使用统计</h2>
+                    <h2>Model Usage Statistics</h2>
                     <table>
                         <thead>
                             <tr>
-                                <th>模型名称</th>
-                                <th>请求次数</th>
-                                <th>输入Token</th>
-                                <th>输出Token</th>
-                                <th>平均响应时间</th>
+                                <th>Model Name</th>
+                                <th>Request Count</th>
+                                <th>Input Tokens</th>
+                                <th>Output Tokens</th>
+                                <th>Average Response Time</th>
                             </tr>
                         </thead>
                         <tbody id="modelStatsBody">
                             <tr>
-                                <td colspan="5">加载中...</td>
+                                <td colspan="5">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1150,17 +1149,17 @@ def get_index_template():
             
             <div id="clients">
                 <div class="card">
-                    <h2>客户端IP统计</h2>
+                    <h2>Client IP Statistics</h2>
                     <table>
                         <thead>
                             <tr>
-                                <th>客户端IP</th>
-                                <th>请求次数</th>
+                                <th>Client IP</th>
+                                <th>Request Count</th>
                             </tr>
                         </thead>
                         <tbody id="ipStatsBody">
                             <tr>
-                                <td colspan="2">加载中...</td>
+                                <td colspan="2">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1169,23 +1168,23 @@ def get_index_template():
             
             <div id="requests">
                 <div class="card">
-                    <h2>最近请求日志</h2>
+                    <h2>Recent Request Logs</h2>
                     <table>
                         <thead>
                             <tr>
-                                <th>时间</th>
-                                <th>客户端IP</th>
-                                <th>模型</th>
-                                <th>输入Token</th>
-                                <th>输出Token</th>
-                                <th>响应时间</th>
-                                <th>状态码</th>
-                                <th>接口</th>
+                                <th>Time</th>
+                                <th>Client IP</th>
+                                <th>Model</th>
+                                <th>Input Tokens</th>
+                                <th>Output Tokens</th>
+                                <th>Response Time</th>
+                                <th>Status Code</th>
+                                <th>Endpoint</th>
                             </tr>
                         </thead>
                         <tbody id="requestLogsBody">
                             <tr>
-                                <td colspan="8">加载中...</td>
+                                <td colspan="8">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1202,12 +1201,12 @@ def get_index_template():
         f.write(html)
     return html
 
-# 确保模板文件夹存在
+# Ensure the templates folder exists
 if not os.path.exists('templates'):
     os.makedirs('templates')
     get_index_template()
 
-# API路由
+# API routes
 @app.route('/api/status')
 def api_status():
     monitor = app.config['MONITOR']
@@ -1269,7 +1268,7 @@ def api_request_stats():
     total_input_tokens = sum(log['input_tokens'] for log in logs)
     total_output_tokens = sum(log['output_tokens'] for log in logs)
     
-    # 计算平均响应时间
+    # Calculate average response time
     response_times = [log['response_time'] for log in logs if log['response_time'] is not None]
     avg_response_time = sum(response_times) / len(response_times) if response_times else 0
     
@@ -1280,7 +1279,7 @@ def api_request_stats():
         "avg_response_time": avg_response_time
     })
 
-# Ollama API代理
+# Ollama API proxy
 @app.route('/ollama/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def proxy_ollama(path):
     db = OllamaMetricsDB()
@@ -1296,7 +1295,7 @@ def proxy_ollama(path):
         elif request.method == 'POST':
             json_data = request.get_json(silent=True)
             if json_data:
-                # 对于API请求，记录输入输出token
+                # For API requests, log input and output tokens
                 if path == 'api/generate' or path == 'api/chat':
                     model_name = json_data.get('model', '')
                     stream = json_data.get('stream', False)
@@ -1304,13 +1303,13 @@ def proxy_ollama(path):
                     resp = requests.post(url, headers=headers, json=json_data)
                     response_time = time.time() - start_time
                     
-                    # 提取token信息
+                    # Extract token information
                     if resp.status_code == 200 and not stream:
                         result = resp.json()
                         input_tokens = result.get('prompt_eval_count', 0)
                         output_tokens = result.get('eval_count', 0)
                         
-                        # 保存请求日志
+                        # Save request log
                         log_data = {
                             "timestamp": datetime.now().isoformat(),
                             "client_ip": client_ip,
@@ -1336,24 +1335,24 @@ def proxy_ollama(path):
         response_headers = [(name, value) for (name, value) in resp.raw.headers.items()]
         return resp.content, resp.status_code, response_headers
     except Exception as e:
-        logger.error(f"代理请求异常: {str(e)}")
+        logger.error(f"Proxy request exception: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 def run_monitor():
-    """运行监控线程"""
+    """Run monitoring thread"""
     monitor = OllamaMonitor()
     threading.Thread(target=monitor.run, daemon=True).start()
     return monitor
 
 def run_web_server(monitor):
-    """运行Web服务器"""
+    """Run web server"""
     app.config['MONITOR'] = monitor
-    logger.info(f"Web服务器正在启动，地址为 http://{WEB_HOST}:{WEB_PORT}")
+    logger.info(f"Web server is starting at http://{WEB_HOST}:{WEB_PORT}")
     serve(app, host=WEB_HOST, port=WEB_PORT, threads=10)
 
-# 增加系统监控守护进程功能
+# Add system monitoring daemon functionality
 def write_systemd_service():
-    """创建系统服务文件"""
+    """Create system service file"""
     service_content = f'''[Unit]
 Description=Ollama Monitor
 After=network.target
@@ -1373,34 +1372,34 @@ WantedBy=multi-user.target
     with open(service_path, 'w') as f:
         f.write(service_content)
     
-    print(f"系统服务文件已生成: {service_path}")
-    print("要安装此服务，请以root运行:")
+    print(f"System service file generated: {service_path}")
+    print("To install this service, run as root:")
     print(f"sudo cp {service_path} /etc/systemd/system/")
     print("sudo systemctl daemon-reload")
     print("sudo systemctl enable ollama-monitor")
     print("sudo systemctl start ollama-monitor")
 
 if __name__ == "__main__":
-    # 确保必要的目录存在
+    # Ensure necessary directories exist
     if not os.path.exists('templates'):
         os.makedirs('templates')
     if not os.path.exists('static'):
         os.makedirs('static')
     
-    # 生成系统服务文件
+    # Generate system service file
     # if '--install' in sys.argv:
     #     write_systemd_service()
     #     sys.exit(0)
     
-    # 启动监控
+    # Start monitoring
     monitor = run_monitor()
     
     try:
-        # 启动Web服务器
+        # Start web server
         run_web_server(monitor)
     except KeyboardInterrupt:
-        logger.info("接收到中断信号，正在关闭...")
+        logger.info("Interrupt signal received, shutting down...")
         monitor.stop()
     except Exception as e:
-        logger.error(f"程序异常: {str(e)}")
+        logger.error(f"Program exception: {str(e)}")
         monitor.stop()

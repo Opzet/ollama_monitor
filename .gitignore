@@ -1,0 +1,6 @@
+.gitignore
+.vs/slnx.sqlite
+.vs/ollama_monitor/v17/DocumentLayout.backup.json
+.vs/ollama_monitor/CopilotIndices/
+.vs/ollama_monitor/v17/*.wsuo
+.vs/ollama_monitor/FileContentIndex/*.vsidx
