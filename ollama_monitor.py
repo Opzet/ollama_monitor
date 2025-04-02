@@ -23,7 +23,7 @@ logger = logging.getLogger('ollama_monitor')
 
 # Configuration parameters
 OLLAMA_HOST = "http://localhost:11434"
-MONITOR_INTERVAL = 60  # Monitoring interval (seconds)
+MONITOR_INTERVAL = 5  # Monitoring interval (seconds)
 WEB_HOST = "0.0.0.0"
 WEB_PORT = 8080
 DB_FILE = "ollama_metrics.db"
@@ -211,15 +211,17 @@ class OllamaMetricsDB:
         """Get client IP statistics"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
-        
+
         cursor.execute('''
-        SELECT client_ip, COUNT(*) as request_count 
+        SELECT client_ip, 
+               COUNT(*) as request_count,
+               MAX(timestamp) as last_request  -- Include last request timestamp
         FROM request_logs
         WHERE timestamp > datetime('now', ?)
         GROUP BY client_ip
         ORDER BY request_count DESC
         ''', (f'-{hours} hours',))
-        
+
         result = cursor.fetchall()
         conn.close()
         return result
@@ -228,19 +230,20 @@ class OllamaMetricsDB:
         """Get model usage statistics"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
-        
+
         cursor.execute('''
         SELECT model_name, 
                COUNT(*) as request_count,
                SUM(input_tokens) as total_input_tokens,
                SUM(output_tokens) as total_output_tokens,
-               AVG(response_time) as avg_response_time
+               AVG(response_time) as avg_response_time,
+               MAX(timestamp) as last_request  -- Include last request timestamp
         FROM request_logs
         WHERE timestamp > datetime('now', ?)
         GROUP BY model_name
         ORDER BY request_count DESC
         ''', (f'-{hours} hours',))
-        
+
         result = cursor.fetchall()
         conn.close()
         return result
@@ -445,7 +448,7 @@ def emit_system_metrics():
         metrics = db.get_recent_system_metrics(hours=1)  # Get the last hour of data
         if metrics:
             socketio.emit('update_metrics', metrics[-1])  # Send the latest data point
-        socketio.sleep(1)  # Emit updates every second
+        socketio.sleep(5)  # Emit updates every 5 seconds
 
 # Ensure static folder exists
 if not os.path.exists('static'):
@@ -618,7 +621,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupTabs();
     
     // Set up auto-refresh
-    setInterval(refreshData, 60000); // Refresh every minute
+    setInterval(refreshData, 5000); // Refresh every 5 seconds
     
     // Initial data load
     refreshData();
@@ -1276,7 +1279,7 @@ def api_model_stats():
             "total_input_tokens": row[2] or 0,
             "total_output_tokens": row[3] or 0,
             "avg_response_time": row[4] or 0,
-            "last_request": row[5]  # Assuming the query includes the last request timestamp
+            "last_request": row[5]  # Use the new last_request field
         })
     return jsonify(result)
 
@@ -1290,7 +1293,7 @@ def api_ip_stats():
         result.append({
             "client_ip": row[0],
             "request_count": row[1],
-            "last_request": row[2]  # Assuming the query includes the last request timestamp
+            "last_request": row[2]  # Use the new last_request field
         })
     return jsonify(result)
 
@@ -1428,28 +1431,5 @@ if __name__ == "__main__":
     # Start real-time updates
     start_realtime_updates()
 
-    # Get the local machine's hostname and IP address
-    hostname = socket.gethostname()
-    local_ip = socket.gethostbyname(hostname)
-
-    # Log and print startup information
-    startup_message = f"""
-    ============================================
-    LLM AI Monitoring System is starting...
-    Hostname: {hostname}
-    Local IP: {local_ip}
-    Web Server: http://{WEB_HOST}:{WEB_PORT}
-    ============================================
-    """
-    logger.info(startup_message.strip())
-    print(startup_message.strip())
-
-    try:
-        # Start web server with SocketIO
-        socketio.run(app, host=WEB_HOST, port=WEB_PORT)
-    except KeyboardInterrupt:
-        logger.info("Interrupt signal received, shutting down...")
-        monitor.stop()
-    except Exception as e:
-        logger.error(f"Program exception: {str(e)}")
-        monitor.stop()
+    # Start the web server
+    run_web_server(monitor)

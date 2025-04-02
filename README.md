@@ -22,8 +22,32 @@
 
 ### Install Dependencies
 
+
+Installing All Required Packages with OpenWebUi
+
+>open-webui 0.6.0 requires python-socketio==5.11.3
+By using flask-socketio==5.3.4, you ensure compatibility with both OpenWebUI and your ollama_monitor application.
+
+You can create a requirements.txt file to manage dependencies. Add the following to requirements.txt:
+
+```
+flask>=2.0.0
+waitress>=2.1.2
+flask-socketio==5.3.4
+python-socketio==5.11.3
+requests>=2.28.0
+psutil>=5.9.0
+werkzeug>=2.0.0
+eventlet>=0.33.0  # Optional for WebSocket support
+gevent  # Optional alternative for WebSocket support
+gevent-websocket  # Required if using gevent
+
+```
+
+Single paste and venv
+
 ```bash
-pip install flask waitress requests psutil
+pip install flask waitress flask-socketio requests psutil werkzeug eventlet gevent gevent-websocket
 ```
 
 ### Start the Monitor
